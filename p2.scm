@@ -17,9 +17,9 @@
       (else 
        (display (caar testPrograms))
        (display " - ")
-       (display (if (eqv? (interpreter (caar testPrograms)) (cadar testPrograms)) "PASSED" "FAILED"))
+       (display (if (eqv? (interpret (caar testPrograms)) (cadar testPrograms)) "PASSED" "FAILED"))
        (newline)
-       (if (eqv? (interpreter (caar testPrograms)) (cadar testPrograms)) (testInterpreter (cdr testPrograms) (+ passed 1) failed) (testInterpreter (cdr testPrograms) passed (+ failed 1)))))))
+       (if (eqv? (interpret (caar testPrograms)) (cadar testPrograms)) (testInterpreter (cdr testPrograms) (+ passed 1) failed) (testInterpreter (cdr testPrograms) passed (+ failed 1)))))))
 
 (define (display-all . vs)
   (for-each display vs))
@@ -33,7 +33,7 @@
 ; ------------------------------------------------------------------------------
 (define interpret
   (lambda (fd)
-    (interpret (parser fd) '(() ())) ))
+    (interpreter (parser fd) '(() ())) ))
 
 ; ------------------------------------------------------------------------------
 ; interpreter
@@ -43,61 +43,86 @@
 ; outputs:
 ;  The return value of the code and a state
 ; ------------------------------------------------------------------------------
+; ------------------------------------------------------------------------------
+; ABSTRACTIONS
+; ------------------------------------------------------------------------------
+(define getRemainingStatements (lambda (pt) (cdr pt)))
+(define getFirstOperation (lambda (pt) (caar pt)))
+(define getOperands (lambda (pt) (cdar pt)))
+(define getFirstOperand (lambda (pt) (cadar pt)))
+(define getSecondPlusOperands (lambda (pt) (cddar pt)))
+(define getThirdPlusOperands (lambda (pt) (cdddar pt)))
+(define getThirdOperand (lambda (pt) (car (getThirdPlusOperands pt))))
+(define getSecondOperand (lambda (pt) (caddar pt)))
+
 (define interpreter
   (lambda (pt s)
     (cond
       ((null? pt) s)
-      ((null? (caar pt)) (interpreter (cdr pt) s))
-      ((eqv? (caar pt) 'var) (interpreter (cdr pt) (decVal (cadar pt) (car (m_eval (if (null? (cddar pt)) (cddar pt) (caddar pt)) s)) (cdr (m_eval (if (null? (cddar pt)) (cddar pt) (caddar pt)) s))))) 
-      ((eqv? (caar pt) '=) (interpreter (cdr pt) (m_assign (cdar pt) s)))  ; if "="
-      ((eqv? (caar pt) 'return) (if (boolean? (car (m_eval (cadar pt) s))) (if (car (m_eval (cadar pt) s)) 'true 'false) (car (m_eval (cadar pt) s))))                                                                        ; if "return"
-      ((eqv? (caar pt) 'if) (interpreter (cdr pt) (m_if (cadar pt) (caddar pt) (if (null? (cdddar pt)) '() (car (cdddar pt))) s)))  ; if "if"
-      ((eqv? (caar pt) 'while) (interpreter (cdr pt) (m_while (cadar pt) (caddar pt) s)))  ; if "while"
+      ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s))
+      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))))) 
+      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s)))  ; if "="
+      ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) 'true 'false) (car (m_eval (getFirstOperand pt) s)))) ; if "return"
+      ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s)))  ; if "if"
+      ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (m_while (getFirstOperand pt) (getSecondOperand pt) s)))  ; if "while"
       (else (error "interpreter ERROR: Invalid statement.")))))
 
 ; ------------------------------------------------------------------------------
 ; m_eval - evaluates an expression
 ; inputs:
-;  pt - parse tree
+;  st - statement
 ;  s - state
 ; outputs:
 ;  Returns the value of the expression as well as an updated state
 ; ------------------------------------------------------------------------------
+; ------------------------------------------------------------------------------
+; ABSTRACTIONS
+; ------------------------------------------------------------------------------
+(define getStOperator (lambda (st) (car st)))
+(define getStFirstOperand (lambda (st) (cadr st)))
+(define getStSecondOperand (lambda (st) (caddr st)))
+(define getStRemainingOperands (lambda (st) (cddr st)))
+
 (define m_eval
-  (lambda (pt s)
+  (lambda (st s)
     (cond
-      ((null? pt) (cons '() s))
-      ((eqv? pt 'true) (cons #t s))
-      ((eqv? pt 'false) (cons #f s))
-      ((atom? pt) (if (or (eqv? (getVal pt s) 'NULL) (null? (getVal pt s))) (error "VAR ERROR: Variable used before declaration or assignment.") (cons (getVal pt s) s)))
-      ((eqv? (car pt) '+) (cons (+ (car (m_eval (cadr pt) s)) (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '-)
-       (if (null? (cddr pt)) (cons (- (car (m_eval (cadr pt) s))) (cdr (m_eval (cadr pt) s))) (cons (- (car (m_eval (cadr pt) s)) (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s)))))))
-      ((eqv? (car pt) '*) (cons (* (car (m_eval (cadr pt) s)) (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '/) (cons (floor (/ (car (m_eval (cadr pt) s)) (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s)))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '%) (cons (modulo (car (m_eval (cadr pt) s)) (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '==) (cons (eqv? (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '!=) (cons (not (eqv? (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s)))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '>) (cons (> (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '>=) (cons (>= (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '<) (cons (< (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '<=) (cons (<= (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '!) (cons (not (car (m_eval (cadr pt) s))) (cdr (m_eval (cadr pt) s))))
-      ((eqv? (car pt) '&&) (cons (and (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
-      ((eqv? (car pt) '||) (cons (or (car (m_eval (cadr pt) s))  (car (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))) (cdr (m_eval (caddr pt) (cdr (m_eval (cadr pt) s))))))
+      ((null? st) (cons '() s))
+      ((eqv? st 'true) (cons #t s))
+      ((eqv? st 'false) (cons #f s))
+      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (error "VAR ERROR: Variable used before declaration or assignment.") (cons (getVal st s) s)))
+      ((eqv? (getStOperator st) '+) (cons (+ (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '-)
+       (if (null? (getStRemainingOperands st)) (cons (- (car (m_eval (getStFirstOperand st) s))) (cdr (m_eval (getStFirstOperand st) s))) (cons (- (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))))
+      ((eqv? (getStOperator st) '*) (cons (* (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '/) (cons (floor (/ (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '%) (cons (modulo (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '==) (cons (eqv? (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '!=) (cons (not (eqv? (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '>) (cons (> (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '>=) (cons (>= (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '<) (cons (< (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '<=) (cons (<= (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '!) (cons (not (car (m_eval (getStFirstOperand st) s))) (cdr (m_eval (getStFirstOperand st) s))))
+      ((eqv? (getStOperator st) '&&) (cons (and (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '||) (cons (or (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
       (else (error "ERROR: Unknown operator/statement.")) )))
 
 ; ------------------------------------------------------------------------------
 ; m_assign - handles an assigment statement
 ; inputs:
-;  pt - parse tree
+;  st - statement
 ;  s - state
 ; outputs:
 ;  The updated state
 ; ------------------------------------------------------------------------------
+; ------------------------------------------------------------------------------
+; ABSTRACTIONS
+; ------------------------------------------------------------------------------
+(define getVar (lambda (st) (car st)))
+
 (define m_assign
-  (lambda (pt s)
-    (setVal (car pt) (car (m_eval (cadr pt) s)) (cdr (m_eval (cadr pt) s))) ))
+  (lambda (st s)
+    (setVal (getVar st) (car (m_eval (getStFirstOperand st) s)) (cdr (m_eval (getStFirstOperand st) s))) ))
 
 ; ------------------------------------------------------------------------------
 ; m_if - handles a conditional block
