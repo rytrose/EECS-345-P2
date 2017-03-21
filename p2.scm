@@ -60,8 +60,6 @@
 (define getThirdOperand (lambda (pt) (car (getThirdPlusOperands pt))))
 (define getSecondOperand (lambda (pt) (caddar pt)))
 
-
-
 (define interpreter
   (lambda (pt s)
     (cond
