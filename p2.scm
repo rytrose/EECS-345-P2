@@ -43,11 +43,11 @@
        (interpreter (parser fd) '((() ())) return continueError breakError)))))
 
 (define continueError
-  (lambda ()
+  (lambda (s)
     (error "CONTINUATION ERROR: Continue outside of loop!")))
 
 (define breakError
-  (lambda ()
+  (lambda (s)
     (error "BREAK ERROR: Break outside of loop!")))
 ; ------------------------------------------------------------------------------
 ; interpreter
