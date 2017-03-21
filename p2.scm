@@ -40,8 +40,15 @@
   (lambda (fd)
     (call/cc
      (lambda (return)
-       (interpreter (parser fd) '((() ())) return)))))
+       (interpreter (parser fd) '((() ())) return continueError breakError)))))
 
+(define continueError
+  (lambda ()
+    (error "CONTINUATION ERROR: Continue outside of loop!")))
+
+(define breakError
+  (lambda ()
+    (error "BREAK ERROR: Break outside of loop!")))
 ; ------------------------------------------------------------------------------
 ; interpreter
 ; inputs:
@@ -62,17 +69,19 @@
 (define getThirdOperand (lambda (pt) (car (getThirdPlusOperands pt))))
 (define getSecondOperand (lambda (pt) (caddar pt)))
 
+;Continuations: Break, Continue, Return (done), Throw
+
 (define interpreter
-  (lambda (pt s return)
+  (lambda (pt s return cont_c cont_b)
     (cond
       ((null? pt) s)
-      ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s return))
-      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))) return)) 
-      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s) return))  ; if "="
+      ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s return cont_c cont_b))
+      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))) return cont_c cont_b)) 
+      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s) return cont_c cont_b))  ; if "="
       ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) (return 'true) (return 'false)) (return (car (m_eval (getFirstOperand pt) s))))) ; if "return"
-      ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s return) return))  ; if "if"
-      ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (m_while (getFirstOperand pt) (getSecondOperand pt) s return) return))  ; if "while"
-      ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return) return)) ; if "begin"
+      ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s return cont_c cont_b) return cont_c cont_b))  ; if "if"
+      ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (call/cc (lambda (breakFunc) (m_while (getFirstOperand pt) (getSecondOperand pt) s return breakFunc))) return cont_c cont_b))  ; if "while"
+      ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return cont_c cont_b) return cont_c cont_b)) ; if "begin"
       (else (error "interpreter ERROR: Invalid statement.")))))
 
 ; ------------------------------------------------------------------------------
@@ -143,13 +152,13 @@
 ;  The final state after evaluating the condition and, if applicable, running the block
 ; ------------------------------------------------------------------------------
 (define m_if
-  (lambda (condition ifblock elseblock state return)
+  (lambda (condition ifblock elseblock state return cont_c cont_b)
     (cond
       ((null? condition) (error "CONDITION ERROR: Condition cannot be null."))
       ((null? ifblock) (error "CONDITION ERROR: Block cannot be null."))
       ((null? state) (error "CONDITION ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (interpreter (cons ifblock '()) (cdr (m_eval condition state)) return))
-      (else (if (null? elseblock) (cdr (m_eval condition state)) (interpreter (cons elseblock '()) (cdr (m_eval condition state)) return))))))
+      ((car (m_eval condition state)) (interpreter (cons ifblock '()) (cdr (m_eval condition state)) return cont_c cont_b))
+      (else (if (null? elseblock) (cdr (m_eval condition state)) (interpreter (cons elseblock '()) (cdr (m_eval condition state)) return cont_c cont_b))))))
       
 ; ------------------------------------------------------------------------------
 ; decVal - declares and initializes a variable
@@ -263,13 +272,13 @@
 ;  The final state after the condition evaluates to false
 ; ------------------------------------------------------------------------------
 (define m_while
-  (lambda (condition block state return)
+  (lambda (condition block state return cont_b)
     (cond
       ((null? condition) (error "LOOP ERROR: Condition cannot be null."))
       ((null? block) (error "LOOP ERROR: Block cannot be null."))
       ((null? state) (error "LOOP ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (m_while condition block (interpreter (cons block '()) (cdr (m_eval condition state)) return) return) )
-      (else (cdr (m_eval condition state))))))
+      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return cont_c cont_b))) return cont_b) )
+      (else (cont_b (cdr (m_eval condition state)))))))
 
 ; ------------------------------------------------------------------------------
 ; m_block - handles a block
@@ -280,8 +289,8 @@
 ;  The final state after the condition evaluates to false
 ; ------------------------------------------------------------------------------
 (define m_block
-  (lambda (block state return)
-    (popLayer (interpreter block (addLayer state) return))))
+  (lambda (block state return cont_c cont_b)
+    (popLayer (interpreter block (addLayer state) return cont_c cont_b))))
 
 
 ; ------------------------------------------------------------------------------
