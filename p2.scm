@@ -70,7 +70,7 @@
       ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) 'true 'false) (car (m_eval (getFirstOperand pt) s)))) ; if "return"
       ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s)))  ; if "if"
       ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (m_while (getFirstOperand pt) (getSecondOperand pt) s)))  ; if "while"
-      ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_begin (getOperands pt) s))) ; if "begin"
+      ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s))) ; if "begin"
       (else (error "interpreter ERROR: Invalid statement.")))))
 
 ; ------------------------------------------------------------------------------
@@ -270,14 +270,14 @@
       (else (cdr (m_eval condition state))))))
 
 ; ------------------------------------------------------------------------------
-; m_begin - handles a BEGIN block
+; m_block - handles a block
 ; inputs:
 ;  block - The block to run
 ;  state - The state before the block is evaluated
 ; outputs:
 ;  The final state after the condition evaluates to false
 ; ------------------------------------------------------------------------------
-(define m_begin
+(define m_block
   (lambda (block state)
     (popLayer (interpreter block (addLayer state)))))
 
