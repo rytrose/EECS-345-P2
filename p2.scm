@@ -40,7 +40,7 @@
   (lambda (fd)
     (call/cc
      (lambda (return)
-       (interpreter (parser fd) '((() ())) return continueError breakError)))))
+       (interpreter (parser fd) '((() ())) return continueError breakError throwError)))))
 
 (define continueError
   (lambda (s)
@@ -49,6 +49,10 @@
 (define breakError
   (lambda (s)
     (error "BREAK ERROR: Break outside of loop!")))
+
+(define throwError
+  (lambda (s e)
+    (error "UNCAUGHT EXCEPTION:" e)))
 ; ------------------------------------------------------------------------------
 ; interpreter
 ; inputs:
@@ -72,19 +76,19 @@
 ;Continuations: Break, Continue, Return (done), Throw
 
 (define interpreter
-  (lambda (pt s return cont_c cont_b)
+  (lambda (pt s return cont_c cont_b cont_t)
     (cond
       ((null? pt) s)
-      ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s return cont_c cont_b))
-      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))) return cont_c cont_b)) 
-      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s) return cont_c cont_b))  ; if "="
+      ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s return cont_c cont_b cont_t))
+      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))) return cont_c cont_b cont_t)) 
+      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s) return cont_c cont_b cont_t))  ; if "="
       ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) (return 'true) (return 'false)) (return (car (m_eval (getFirstOperand pt) s))))) ; if "return"
-      ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s return cont_c cont_b) return cont_c cont_b))  ; if "if"
-      ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (call/cc (lambda (breakFunc) (m_while (getFirstOperand pt) (getSecondOperand pt) s return breakFunc))) return cont_c cont_b))  ; if "while"
-      ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return cont_c cont_b) return cont_c cont_b)) ; if "begin"
+      ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s return cont_c cont_b cont_t) return cont_c cont_b cont_t))  ; if "if"
+      ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (call/cc (lambda (breakFunc) (m_while (getFirstOperand pt) (getSecondOperand pt) s return breakFunc cont_t))) return cont_c cont_b cont_t))  ; if "while"
+      ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return cont_c cont_b cont_t) return cont_c cont_b cont_t)) ; if "begin"
       ((eqv? (getFirstOperation pt) 'continue) (cont_c s))
       ((eqv? (getFirstOperation pt) 'break) (cont_b s))
-      (else (error "interpreter ERROR: Invalid statement:" (getFirstOperation pt))))))
+      (else (cont_t (buildError "interpreter ERROR: Invalid statement:" (getFirstOperation pt)))))))
 
 ; ------------------------------------------------------------------------------
 ; m_eval - evaluates an expression
@@ -103,12 +107,12 @@
 (define getStRemainingOperands (lambda (st) (cddr st)))
 
 (define m_eval
-  (lambda (st s)
+  (lambda (st s cont_t)
     (cond
       ((null? st) (cons '() s))
       ((eqv? st 'true) (cons #t s))
       ((eqv? st 'false) (cons #f s))
-      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (error "VAR ERROR: Variable used before declaration or assignment:" st) (cons (getVal st s) s)))
+      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (cont_t (buildError "VAR ERROR: Variable used before declaration or assignment:" st)) (cons (getVal st s) s)))
       ((eqv? (getStOperator st) '+) (cons (+ (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
       ((eqv? (getStOperator st) '-)
        (if (null? (getStRemainingOperands st)) (cons (- (car (m_eval (getStFirstOperand st) s))) (cdr (m_eval (getStFirstOperand st) s))) (cons (- (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))))
@@ -154,13 +158,13 @@
 ;  The final state after evaluating the condition and, if applicable, running the block
 ; ------------------------------------------------------------------------------
 (define m_if
-  (lambda (condition ifblock elseblock state return cont_c cont_b)
+  (lambda (condition ifblock elseblock state return cont_c cont_b cont_t)
     (cond
       ((null? condition) (error "CONDITION ERROR: Condition cannot be null."))
       ((null? ifblock) (error "CONDITION ERROR: Block cannot be null."))
       ((null? state) (error "CONDITION ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (interpreter (cons ifblock '()) (cdr (m_eval condition state)) return cont_c cont_b))
-      (else (if (null? elseblock) (cdr (m_eval condition state)) (interpreter (cons elseblock '()) (cdr (m_eval condition state)) return cont_c cont_b))))))
+      ((car (m_eval condition state)) (interpreter (cons ifblock '()) (cdr (m_eval condition state)) return cont_c cont_b cont_t))
+      (else (if (null? elseblock) (cdr (m_eval condition state)) (interpreter (cons elseblock '()) (cdr (m_eval condition state)) return cont_c cont_b cont_t))))))
       
 ; ------------------------------------------------------------------------------
 ; decVal - declares and initializes a variable
@@ -274,12 +278,12 @@
 ;  The final state after the condition evaluates to false
 ; ------------------------------------------------------------------------------
 (define m_while
-  (lambda (condition block state return cont_b)
+  (lambda (condition block state return cont_b cont_t)
     (cond
       ((null? condition) (error "LOOP ERROR: Condition cannot be null."))
       ((null? block) (error "LOOP ERROR: Block cannot be null."))
       ((null? state) (error "LOOP ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return (lambda (s) (cont_c (popLayer s))) (lambda (s) (cont_b (popLayer s)))))) return cont_b) )
+      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return (lambda (s) (cont_c (popLayer s))) (lambda (s) (cont_b (popLayer s)))))) return cont_b cont_t) )
       (else (cont_b (cdr (m_eval condition state)))))))
 
 ; ------------------------------------------------------------------------------
@@ -291,8 +295,8 @@
 ;  The final state after the condition evaluates to false
 ; ------------------------------------------------------------------------------
 (define m_block
-  (lambda (block state return cont_c cont_b)
-    (popLayer (interpreter block (addLayer state) return cont_c cont_b))))
+  (lambda (block state return cont_c cont_b cont_t)
+    (popLayer (interpreter block (addLayer state) return cont_c cont_b cont_t))))
 
 
 ; ------------------------------------------------------------------------------
