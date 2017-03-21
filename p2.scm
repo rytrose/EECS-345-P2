@@ -38,7 +38,25 @@
 ; ------------------------------------------------------------------------------
 (define interpret
   (lambda (fd)
-    (interpreter (parser fd) '(() ()))))
+    (call/cc
+     (lambda (return)
+       (interpreter (parser fd) '(() ()) nextError breakError continueError return throwError)))))
+
+(define nextError
+  (lambda (s)
+    (error "ERROR: EOF reached without Return!")))
+
+(define breakError
+  (lambda ()
+    (error "ERROR: Break statement outside of Loop!")))
+
+(define continueError
+  (lambda ()
+    (error "ERROR: Continue Statement outside of Loop!")))
+
+(define throwError
+  (lambda (e)
+    (error "UNCAUGHT EXCEPTION:" e)))
 
 ; ------------------------------------------------------------------------------
 ; interpreter
@@ -59,20 +77,28 @@
 (define getThirdPlusOperands (lambda (pt) (cdddar pt)))
 (define getThirdOperand (lambda (pt) (car (getThirdPlusOperands pt))))
 (define getSecondOperand (lambda (pt) (caddar pt)))
+(define getCatchOrFinally (lambda (pt) (cddar pt)))
 
 
-
+; Passes five continuations: Cont, Break, Continue, Return, Throw
+; cont essentially means "continue the parent block", so it only changes when we enter a new block
+; cont_b essentially means "Break the innermost loop", so it only changes when we enter a new loop
+; cont_c essentially means "Skip to next iteration of the innermost loop", so it only changes when we enter a new loop
+; cont_r essentially means "Return this value from the program", so it NEVER changes, ever. It would change if we implemented function calls.
+; cont_t essentially means "Skip to the catch / finally block for the innermost TRY block", so it only changes when we enter a new TRY block.
+;     cont_t gets passed around a lot though because nearly every function can throw an error.
 (define interpreter
-  (lambda (pt s)
+  (lambda (pt s cont cont_b cont_c cont_r cont_t)
     (cond
-      ((null? pt) s)
-      ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s))
-      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))))) 
-      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s)))  ; if "="
-      ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) 'true 'false) (car (m_eval (getFirstOperand pt) s)))) ; if "return"
-      ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s)))  ; if "if"
-      ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (m_while (getFirstOperand pt) (getSecondOperand pt) s)))  ; if "while"
-      (else (error "interpreter ERROR: Invalid statement.")))))
+      ((null? pt) (cont s))
+      ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s cont cont_b cont_c cont_r cont_t))
+      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))) cont cont_b cont_c cont_r cont_t)) 
+      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s) cont cont_b cont_c cont_r cont_t))  ; if "="
+      ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) (return 'true) (return 'false)) (return (car (m_eval (getFirstOperand pt) s))))) ; if "return"
+      ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s) cont cont_b cont_c cont_r cont_t))  ; if "if"
+      ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (m_while (getFirstOperand pt) (getSecondOperand pt) s) cont cont_b cont_c cont_r cont_t))  ; if "while"
+;      ((eqv? (getFirstOperation pt) 'try) (interpreter (getOperands pt) s (lambda (s1) (interpreter (getRemainingStatements pt) s1 cont cont_b cont_c cont_r cont_t)) cont_b cont_c cont_r (lambda (s2 e) (if (not (null? (getSecondOperand pt))) (cont (interpret (getSecondOperand pt) (decVal (caadr (getSecondOperand pt)) e (addLayer s2)) (lambda (s3) (cont (interpret (getThirdOperand pt) (popLayer s3)))) cont_b cont_c cont_r cont_t)) (cont (interpret (getThirdOperand pt) s3 cont_b cont_c cont_r cont_t))))))  ; if "try"
+      (else (cont_t "Interpreter ERROR: Invalid statement.")))))
 
 ; ------------------------------------------------------------------------------
 ; m_eval - evaluates an expression
