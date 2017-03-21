@@ -82,7 +82,9 @@
       ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s return cont_c cont_b) return cont_c cont_b))  ; if "if"
       ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (call/cc (lambda (breakFunc) (m_while (getFirstOperand pt) (getSecondOperand pt) s return breakFunc))) return cont_c cont_b))  ; if "while"
       ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return cont_c cont_b) return cont_c cont_b)) ; if "begin"
-      (else (error "interpreter ERROR: Invalid statement.")))))
+      ((eqv? (getFirstOperation pt) 'continue) (cont_c s))
+      ((eqv? (getFirstOperation pt) 'break) (cont_b s))
+      (else (error "interpreter ERROR: Invalid statement:" (getFirstOperation pt))))))
 
 ; ------------------------------------------------------------------------------
 ; m_eval - evaluates an expression
