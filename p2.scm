@@ -279,7 +279,7 @@
       ((null? condition) (error "LOOP ERROR: Condition cannot be null."))
       ((null? block) (error "LOOP ERROR: Block cannot be null."))
       ((null? state) (error "LOOP ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return cont_c cont_b))) return cont_b) )
+      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return cont_c (lambda (s) (cont_b (popLayer s)))))) return cont_b) )
       (else (cont_b (cdr (m_eval condition state)))))))
 
 ; ------------------------------------------------------------------------------
