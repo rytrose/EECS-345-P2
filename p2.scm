@@ -8,7 +8,7 @@
 ; ------------------------------------------------------------------------------
 ; test
 ; ------------------------------------------------------------------------------
-(define testPrograms '(("Test1.txt" 150)("Test2.txt" -4)("Test3.txt" 10)("Test4.txt" 16)("Test5.txt" 220)("Test6.txt" 5)("Test7.txt" 6)("Test8.txt" 10)("Test9.txt" 5)("Test10.txt" -39)("Test15.txt" true)("Test16.txt" 100)("Test17.txt" false)("Test18.txt" true)("Test19.txt" 128)("Test20.txt" 12)))
+(define testPrograms '(("Test1.txt" 20)("Test2.txt" 164)("Test3.txt" 32)("Test4.txt" 2)("Test6.txt" 25)("Test7.txt" 21)("Test8.txt" 6)("Test9.txt" -1)("Test10.txt" 789)("Test14.txt" 12)("Test15.txt" 125)("Test16.txt" 110)("Test17.txt" 2000400)("Test18.txt" 101)("Test20.txt" 21)))
 
 (define testInterpreter
   (lambda (testPrograms passed failed)
@@ -65,6 +65,7 @@
       ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) 'true 'false) (car (m_eval (getFirstOperand pt) s)))) ; if "return"
       ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s)))  ; if "if"
       ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (m_while (getFirstOperand pt) (getSecondOperand pt) s)))  ; if "while"
+      ;((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_begin (getOperands pt) s))) ; if "begin"
       (else (error "interpreter ERROR: Invalid statement.")))))
 
 ; ------------------------------------------------------------------------------
@@ -239,6 +240,18 @@
       ((null? state) (error "LOOP ERROR: State cannot be null."))
       ((car (m_eval condition state)) (m_while condition block (interpreter (cons block '()) (cdr (m_eval condition state)))) )
       (else (cdr (m_eval condition state))))))
+
+; ------------------------------------------------------------------------------
+; m_begin - handles a BEGIN block
+; inputs:
+;  block - The block to run
+;  state - The state before the block is evaluated
+; outputs:
+;  The final state after the condition evaluates to false
+; ------------------------------------------------------------------------------
+(define m_begin
+  (lambda (block state)
+    (interpreter block state)))
 
 ; ------------------------------------------------------------------------------
 ; atom?
