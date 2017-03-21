@@ -70,7 +70,7 @@
       ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) 'true 'false) (car (m_eval (getFirstOperand pt) s)))) ; if "return"
       ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s)))  ; if "if"
       ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (m_while (getFirstOperand pt) (getSecondOperand pt) s)))  ; if "while"
-      ;((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_begin (getOperands pt) s))) ; if "begin"
+      ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_begin (getOperands pt) s))) ; if "begin"
       (else (error "interpreter ERROR: Invalid statement.")))))
 
 ; ------------------------------------------------------------------------------
@@ -279,7 +279,16 @@
 ; ------------------------------------------------------------------------------
 (define m_begin
   (lambda (block state)
-    (interpreter block state)))
+    (popLayer (interpreter block (addLayer state)))))
+
+
+; ------------------------------------------------------------------------------
+; ABSTRACTIONS
+; ------------------------------------------------------------------------------
+(define addLayer (lambda (s) (cons '(() ()) s)))
+(define popLayer (lambda (s) (cdr s)))
+
+
 
 ; ------------------------------------------------------------------------------
 ; atom?
