@@ -4,6 +4,8 @@
 ; Load the parser and lexical analyzer
 (load "simpleParser.scm")
 
+(require racket/format)
+
 
 ; ------------------------------------------------------------------------------
 ; test
@@ -56,11 +58,7 @@
 
 (define buildError
   (lambda (s e)
-    (cond
-      ((number? e) (string-append s (number->string e) "\n"))
-      ((symbol? e) (string-append s (symbol->string e) "\n"))
-      ((string? e) (string-append s e "\n")) )))
-      
+    (string-append s (~a e) "\n") ))
      
 ; ------------------------------------------------------------------------------
 ; interpreter
@@ -97,8 +95,8 @@
       ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return cont_c cont_b cont_t) return cont_c cont_b cont_t)) ; if "begin"
       ((eqv? (getFirstOperation pt) 'continue) (cont_c s))
       ((eqv? (getFirstOperation pt) 'break) (cont_b s))
-      ((eqv? (getFirstOperation pt) 'try) (interpreter (getRemainingStatements pt) (m_try (getFirstOperand pt) (getSecondOperand pt) (getThirdOperand pt) s return cont_c cont_b cont_t)))
-      (else (cont_t (buildError "INTERPRETER ERROR: Invalid statement:" (getFirstOperation pt)))))))
+      ((eqv? (getFirstOperation pt) 'try) (interpreter (getRemainingStatements pt) (m_try (getFirstOperand pt) (getSecondOperand pt) (getThirdOperand pt) s return cont_c cont_b cont_t) return cont_c cont_b cont_t))
+      (else (cont_t s (buildError "INTERPRETER ERROR: Invalid statement:" (getFirstOperation pt)))))))
 
 ; ------------------------------------------------------------------------------
 ; m_eval - evaluates an expression
@@ -122,7 +120,7 @@
       ((null? st) (cons '() s))
       ((eqv? st 'true) (cons #t s))
       ((eqv? st 'false) (cons #f s))
-      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (cont_t (buildError "VAR ERROR: Variable used before declaration or assignment:" st)) (cons (getVal st s) s)))
+      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (cont_t s (buildError s "VAR ERROR: Variable used before declaration or assignment:" st)) (cons (getVal st s) s)))
       ((eqv? (getStOperator st) '+) (cons (+ (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '-)
        (if (null? (getStRemainingOperands st)) (cons (- (car (m_eval (getStFirstOperand st) s cont_t))) (cdr (m_eval (getStFirstOperand st) s cont_t))) (cons (- (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t)))))
@@ -133,7 +131,8 @@
       ((eqv? (getStOperator st) '!=) (cons (not (eqv? (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t)))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '>) (cons (> (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '>=) (cons (>= (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
-      ((eqv? (getStOperator st) '<) (cons (< (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '<) (cons (<
+                                           (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '<=) (cons (<= (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '!) (cons (not (car (m_eval (getStFirstOperand st) s cont_t))) (cdr (m_eval (getStFirstOperand st) s cont_t))))
       ((eqv? (getStOperator st) '&&) (cons (and (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
@@ -223,7 +222,7 @@
 (define setVal
   (lambda (name value state)
     (cond
-      ((null? state) (cont_t (buildError "SETVAL ERROR: Variable not found!")))
+      ((null? state) (cont_t state (buildError state "SETVAL ERROR: Variable not found!")))
       ((eqv? #f (call/cc (lambda (cont) (cont (setVal* name value (car state) cont))))) (cons (car state) (setVal name value (cdr state))))
       (else (cons (setVal* name value (car state) (lambda (v) (error v))) (cdr state))))))
 
@@ -253,7 +252,7 @@
 (define getVal
   (lambda (name state)
     (cond
-      ((null? name) (cont_t (buildError "GETVAL ERROR: Name cannot be null.")))
+      ((null? name) (cont_t state (buildError state "GETVAL ERROR: Name cannot be null.")))
       ((null? state) 'NULL)
       ((or (integer? name) (boolean? name)) name)
       (else
@@ -306,7 +305,19 @@
 ; ------------------------------------------------------------------------------
 (define m_block
   (lambda (block state return cont_c cont_b cont_t)
-    (popLayer (interpreter block (addLayer state) return cont_c cont_b cont_t))))
+    (popLayer (interpreter block (addLayer state) return cont_c cont_b (lambda (s e) (cont_t (popLayer s) e)))) ))
+
+; ------------------------------------------------------------------------------
+; m_block_args - handles a block where arguments are passed in
+; inputs:
+;  block - The block to run
+;  state - The state before the block is evaluated
+; outputs:
+;  The final state after the condition evaluates to false
+; ------------------------------------------------------------------------------
+(define m_block_args
+  (lambda (block state return cont_c cont_b cont_t)
+    (popLayer (interpreter block state return cont_c cont_b (lambda (s e) (cont_t (popLayer s) e)))) ))
 
 
 ; ------------------------------------------------------------------------------
@@ -333,10 +344,50 @@
 ; ------------------------------------------------------------------------------
 (define m_try
   (lambda (block catch finally s return cont_c cont_b cont_t)
+    (m_finally finally (call/cc
+                        (lambda (exit)
+                          (exit (m_block block s return cont_c cont_b (lambda (tryState e)
+                                                                           (exit (m_catch catch e tryState return cont_c cont_b cont_t))))))) return cont_c cont_b cont_t)) )
+
+; ------------------------------------------------------------------------------
+; m_catch - handles a caught exception
+; inputs:
+;  catch - The associated CATCH code
+;  e - exception thrown
+;  s - The state when exception was thrown
+;  return - The continuation for RETURN statements
+;  cont_c - The continuation for CONTINUE statements
+;  cont_b - The continuation for BREAK statements
+;  cont_t - The previous continuation for THROW statements
+;  
+; outputs:
+;  The final state after the CATCH block executes.
+; ------------------------------------------------------------------------------
+(define m_catch
+  (lambda (catch e s return cont_c cont_b cont_t)
     (cond
-      
+      ((null? catch) s)
+      (else (m_block_args (caddr catch) (decVal (caadr catch) e (addLayer s)) return cont_c cont_b cont_t)) )))
 
 
+; ------------------------------------------------------------------------------
+; m_finally - handles a finally block
+; inputs:
+;  finally - The associated FINALLY code
+;  s - The state after try/catch was thrown
+;  return - The continuation for RETURN statements
+;  cont_c - The continuation for CONTINUE statements
+;  cont_b - The continuation for BREAK statements
+;  cont_t - The previous continuation for THROW statements
+;  
+; outputs:
+;  The final state after the finally block executes.
+; ------------------------------------------------------------------------------
+(define m_finally
+  (lambda (finally s return cont_c cont_b cont_t)
+    (cond
+      ((null? finally) s)
+      (else (m_block (cadr finally) s return cont_c cont_b cont_t)) )))
 
 
 ; ------------------------------------------------------------------------------
