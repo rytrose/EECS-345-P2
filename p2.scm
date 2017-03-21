@@ -21,6 +21,11 @@
        (newline)
        (if (eqv? (interpret (caar testPrograms)) (cadar testPrograms)) (testInterpreter (cdr testPrograms) (+ passed 1) failed) (testInterpreter (cdr testPrograms) passed (+ failed 1)))))))
 
+; Shorthand for testing
+(define test
+  (lambda ()
+    (testInterpreter testPrograms 0 0)))
+
 (define (display-all . vs)
   (for-each display vs))
 
@@ -33,7 +38,7 @@
 ; ------------------------------------------------------------------------------
 (define interpret
   (lambda (fd)
-    (interpreter (parser fd) '(() ())) ))
+    (interpreter (parser fd) '((() ())))))
 
 ; ------------------------------------------------------------------------------
 ; interpreter
@@ -54,6 +59,8 @@
 (define getThirdPlusOperands (lambda (pt) (cdddar pt)))
 (define getThirdOperand (lambda (pt) (car (getThirdPlusOperands pt))))
 (define getSecondOperand (lambda (pt) (caddar pt)))
+
+
 
 (define interpreter
   (lambda (pt s)
@@ -159,10 +166,19 @@
       ; if name is null, error
       ((null? name) (error "DECVAL ERROR: Failed adding variable to state."))
       ; if the var name already exists, error
-      ((not (eqv? (getVal name state) 'NULL)) (error "DECVAL NAMESPACE ERROR: Namespace for var already occupied."))
+      ((not (nameAvailable name (caar state))) (error "DECVAL NAMESPACE ERROR: Namespace for var already occupied."))
       (else
        ; add name and value to state
-       (cons (cons name (car state)) (cons (cons value (cadr state)) '()) )))))
+       (cons (cons (cons name (caar state)) (cons (cons value (cadar state)) '())) (cdr state))))))
+
+; Check to see if this variable is already defined on this layer of the state. That would be illegal. However, if the variable is declared on a previous layer,
+; it can legally be redeclared on this layer.
+(define nameAvailable
+  (lambda (name varsLayer)
+    (cond
+      ((null? varsLayer) #t)
+      ((eqv? (car varsLayer) name) #f)
+      (else (nameAvailable name (cdr varsLayer))))))
 
 ; ------------------------------------------------------------------------------
 ; setVal - sets the value of an initialized variable
@@ -173,11 +189,19 @@
 ; outputs:
 ;  The updated state
 ; ------------------------------------------------------------------------------
+
 (define setVal
   (lambda (name value state)
     (cond
+      ((null? state) (error "SETVAL ERROR: Variable not found!"))
+      ((eqv? #f (setVal* name value (car state))) (cons (car state) (setVal name value (cdr state))))
+      (else (cons (setVal* name value (car state)) (cdr state))))))
+
+(define setVal*
+  (lambda (name value state)
+    (cond
       ; if the names or values of states are null, error
-      ((and (null? (car state)) (null? (cadr state))) (error "SETVAL ERROR: Variable not found."))
+      ((and (null? (car state)) (null? (cadr state))) #f)
       ; if it finds the var, set var 
       ((eqv? name (caar state)) (cons (car state) (cons (cons value (cdadr state)) '())))    
       ; else recurse on the next state value 
@@ -186,7 +210,7 @@
 ; helper to shorten recursive line
 (define setValRec
   (lambda (name value state)
-    (setVal name value (cons (cdar state) (cons (cdadr state) '()))) ))
+    (setVal* name value (cons (cdar state) (cons (cdadr state) '()))) ))
 
 ; ------------------------------------------------------------------------------
 ; getVal - wrapper method for getVal* to deconstruct state variable as necessary
@@ -200,9 +224,10 @@
   (lambda (name state)
     (cond
       ((null? name) (error "GETVAL ERROR: Name cannot be null."))
-      ((null? state) (error "GETVAL ERROR: State cannot be null."))
+      ((null? state) 'NULL)
       ((or (integer? name) (boolean? name)) name)
-      (else (getVal* name (car state) (cadr state))))))
+      (else
+       (if (eqv? (getVal* name (caar state) (cadar state)) 'NULL) (getVal name (cdr state)) (getVal* name (caar state) (cadar state)))))))
 
 ; ------------------------------------------------------------------------------
 ; getVal* - gets the value of a given variable
