@@ -97,6 +97,7 @@
       ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return cont_c cont_b cont_t) return cont_c cont_b cont_t)) ; if "begin"
       ((eqv? (getFirstOperation pt) 'continue) (cont_c s))
       ((eqv? (getFirstOperation pt) 'break) (cont_b s))
+      ((eqv? (getFirstOperation pt) 'try) (interpreter (getRemainingStatements pt) (m_try (getFirstOperand pt) (getSecondOperand pt) (getThirdOperand pt) s return cont_c cont_b cont_t)))
       (else (cont_t (buildError "INTERPRETER ERROR: Invalid statement:" (getFirstOperation pt)))))))
 
 ; ------------------------------------------------------------------------------
@@ -313,6 +314,28 @@
 ; ------------------------------------------------------------------------------
 (define addLayer (lambda (s) (cons '(() ()) s)))
 (define popLayer (lambda (s) (cdr s)))
+
+
+; ------------------------------------------------------------------------------
+; m_try - handles a TRY block
+; inputs:
+;  block - The block to try
+;  catch - The associated CATCH code
+;  finally - The associated FINALLY code
+;  s - The initial state
+;  return - The continuation for RETURN statements
+;  cont_c - The continuation for CONTINUE statements
+;  cont_b - The continuation for BREAK statements
+;  cont_t - The previous continuation for THROW statements
+;  
+; outputs:
+;  The final state after the TRY, CATCH and FINALLY blocks execute.
+; ------------------------------------------------------------------------------
+(define m_try
+  (lambda (block catch finally s return cont_c cont_b cont_t)
+    (cond
+      
+
 
 
 
