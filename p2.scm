@@ -158,6 +158,11 @@
 ;  state - the current state
 ; outputs:
 ;  The updated state
+;
+; NOTES:
+;  We implemented decVal to allow a local variable to have the same name as a
+;  variable in a different layer. It throws an error if you attept to declare
+;  the same variable twice in the same layer.
 ; ------------------------------------------------------------------------------
 (define decVal 
   (lambda (name value state)
@@ -193,23 +198,23 @@
   (lambda (name value state)
     (cond
       ((null? state) (error "SETVAL ERROR: Variable not found!"))
-      ((eqv? #f (setVal* name value (car state))) (cons (car state) (setVal name value (cdr state))))
-      (else (cons (setVal* name value (car state)) (cdr state))))))
+      ((eqv? #f (call/cc (lambda (cont) (cont (setVal* name value (car state) cont))))) (cons (car state) (setVal name value (cdr state))))
+      (else (cons (setVal* name value (car state) (lambda (v) (error v))) (cdr state))))))
 
 (define setVal*
-  (lambda (name value state)
+  (lambda (name value state exit)
     (cond
       ; if the names or values of states are null, error
-      ((and (null? (car state)) (null? (cadr state))) #f)
+      ((and (null? (car state)) (null? (cadr state))) (exit #f))
       ; if it finds the var, set var 
       ((eqv? name (caar state)) (cons (car state) (cons (cons value (cdadr state)) '())))    
       ; else recurse on the next state value 
-      (else (cons (cons (caar state) (car (setValRec name value state))) (cons (cons (caadr state) (cadr (setValRec name value state))) '()))) )))
+      (else (cons (cons (caar state) (car (setValRec name value state exit))) (cons (cons (caadr state) (cadr (setValRec name value state exit))) '()))) )))
 
 ; helper to shorten recursive line
 (define setValRec
-  (lambda (name value state)
-    (setVal* name value (cons (cdar state) (cons (cdadr state) '()))) ))
+  (lambda (name value state exit)
+    (setVal* name value (cons (cdar state) (cons (cdadr state) '())) exit) ))
 
 ; ------------------------------------------------------------------------------
 ; getVal - wrapper method for getVal* to deconstruct state variable as necessary
