@@ -108,7 +108,7 @@
       ((null? st) (cons '() s))
       ((eqv? st 'true) (cons #t s))
       ((eqv? st 'false) (cons #f s))
-      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (error "VAR ERROR: Variable used before declaration or assignment.") (cons (getVal st s) s)))
+      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (error "VAR ERROR: Variable used before declaration or assignment:" st) (cons (getVal st s) s)))
       ((eqv? (getStOperator st) '+) (cons (+ (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
       ((eqv? (getStOperator st) '-)
        (if (null? (getStRemainingOperands st)) (cons (- (car (m_eval (getStFirstOperand st) s))) (cdr (m_eval (getStFirstOperand st) s))) (cons (- (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))))
@@ -279,7 +279,7 @@
       ((null? condition) (error "LOOP ERROR: Condition cannot be null."))
       ((null? block) (error "LOOP ERROR: Block cannot be null."))
       ((null? state) (error "LOOP ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return cont_c (lambda (s) (cont_b (popLayer s)))))) return cont_b) )
+      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return (lambda (s) (cont_c (popLayer s))) (lambda (s) (cont_b (popLayer s)))))) return cont_b) )
       (else (cont_b (cdr (m_eval condition state)))))))
 
 ; ------------------------------------------------------------------------------
