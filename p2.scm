@@ -21,6 +21,11 @@
        (newline)
        (if (eqv? (interpret (caar testPrograms)) (cadar testPrograms)) (testInterpreter (cdr testPrograms) (+ passed 1) failed) (testInterpreter (cdr testPrograms) passed (+ failed 1)))))))
 
+; Shorthand for testing
+(define test
+  (lambda ()
+    (testInterpreter testPrograms 0 0)))
+
 (define (display-all . vs)
   (for-each display vs))
 
@@ -33,7 +38,7 @@
 ; ------------------------------------------------------------------------------
 (define interpret
   (lambda (fd)
-    (interpreter (parser fd) '(() ())) ))
+    (interpreter (parser fd) '(() () ())) ))
 
 ; ------------------------------------------------------------------------------
 ; interpreter
@@ -54,6 +59,8 @@
 (define getThirdPlusOperands (lambda (pt) (cdddar pt)))
 (define getThirdOperand (lambda (pt) (car (getThirdPlusOperands pt))))
 (define getSecondOperand (lambda (pt) (caddar pt)))
+
+
 
 (define interpreter
   (lambda (pt s)
