@@ -178,6 +178,7 @@
       ((null? varsLayer) #t)
       ((eqv? (car varsLayer) name) #f)
       (else (nameAvailable name (cdr varsLayer))))))
+
 ; ------------------------------------------------------------------------------
 ; setVal - sets the value of an initialized variable
 ; inputs:
@@ -187,11 +188,19 @@
 ; outputs:
 ;  The updated state
 ; ------------------------------------------------------------------------------
+
 (define setVal
   (lambda (name value state)
     (cond
+      ((null? state) (error "SETVAL ERROR: Variable not found!"))
+      ((eqv? #f (setVal* name value (car state))) (cons (car state) (setVal name value (cdr state))))
+      (else (cons (setVal* name value (car state)) (cdr state))))))
+
+(define setVal*
+  (lambda (name value state)
+    (cond
       ; if the names or values of states are null, error
-      ((and (null? (car state)) (null? (cadr state))) (error "SETVAL ERROR: Variable not found."))
+      ((and (null? (car state)) (null? (cadr state))) #f)
       ; if it finds the var, set var 
       ((eqv? name (caar state)) (cons (car state) (cons (cons value (cdadr state)) '())))    
       ; else recurse on the next state value 
@@ -200,7 +209,7 @@
 ; helper to shorten recursive line
 (define setValRec
   (lambda (name value state)
-    (setVal name value (cons (cdar state) (cons (cdadr state) '()))) ))
+    (setVal* name value (cons (cdar state) (cons (cdadr state) '()))) ))
 
 ; ------------------------------------------------------------------------------
 ; getVal - wrapper method for getVal* to deconstruct state variable as necessary
@@ -214,9 +223,10 @@
   (lambda (name state)
     (cond
       ((null? name) (error "GETVAL ERROR: Name cannot be null."))
-      ((null? state) (error "GETVAL ERROR: State cannot be null."))
+      ((null? state) 'NULL)
       ((or (integer? name) (boolean? name)) name)
-      (else (getVal* name (car state) (cadr state))))))
+      (else
+       (if (eqv? (getVal* name (caar state) (cadar state)) 'NULL) (getVal name (cdr state)) (getVal* name (caar state) (cadar state)))))))
 
 ; ------------------------------------------------------------------------------
 ; getVal* - gets the value of a given variable

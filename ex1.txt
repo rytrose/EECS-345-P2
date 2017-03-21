@@ -1,0 +1,16 @@
+while (1 < 2) {
+return 3;
+return 9;
+}
+if (true == true) {
+return 2;
+return 8;
+}
+try {
+return 0;
+return 5;
+}
+finally {
+return 4;
+return 7;
+}
