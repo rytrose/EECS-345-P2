@@ -51,8 +51,17 @@
     (error "BREAK ERROR: Break outside of loop!")))
 
 (define throwError
+  (lambda (s)
+    (display s) ))
+
+(define buildError
   (lambda (s e)
-    (error "UNCAUGHT EXCEPTION:" e)))
+    (cond
+      ((number? e) (string-append s (number->string e) "\n"))
+      ((symbol? e) (string-append s (symbol->string e) "\n"))
+      ((string? e) (string-append s e "\n")) )))
+      
+     
 ; ------------------------------------------------------------------------------
 ; interpreter
 ; inputs:
@@ -80,15 +89,15 @@
     (cond
       ((null? pt) s)
       ((null? (getFirstOperation pt)) (interpreter (getRemainingStatements pt) s return cont_c cont_b cont_t))
-      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s))) return cont_c cont_b cont_t)) 
-      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s) return cont_c cont_b cont_t))  ; if "="
-      ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s))) (if (car (m_eval (getFirstOperand pt) s)) (return 'true) (return 'false)) (return (car (m_eval (getFirstOperand pt) s))))) ; if "return"
+      ((eqv? (getFirstOperation pt) 'var) (interpreter (getRemainingStatements pt) (decVal (getFirstOperand pt) (car (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s cont_t)) (cdr (m_eval (if (null? (getSecondPlusOperands pt)) (getSecondPlusOperands pt) (getSecondOperand pt)) s cont_t))) return cont_c cont_b cont_t)) 
+      ((eqv? (getFirstOperation pt) '=) (interpreter (getRemainingStatements pt) (m_assign (getOperands pt) s cont_t) return cont_c cont_b cont_t))  ; if "="
+      ((eqv? (getFirstOperation pt) 'return) (if (boolean? (car (m_eval (getFirstOperand pt) s cont_t))) (if (car (m_eval (getFirstOperand pt) s cont_t)) (return 'true) (return 'false)) (return (car (m_eval (getFirstOperand pt) s cont_t))))) ; if "return"
       ((eqv? (getFirstOperation pt) 'if) (interpreter (getRemainingStatements pt) (m_if (getFirstOperand pt) (getSecondOperand pt) (if (null? (getThirdPlusOperands pt)) '() (getThirdOperand pt)) s return cont_c cont_b cont_t) return cont_c cont_b cont_t))  ; if "if"
       ((eqv? (getFirstOperation pt) 'while) (interpreter (getRemainingStatements pt) (call/cc (lambda (breakFunc) (m_while (getFirstOperand pt) (getSecondOperand pt) s return breakFunc cont_t))) return cont_c cont_b cont_t))  ; if "while"
       ((eqv? (getFirstOperation pt) 'begin) (interpreter (getRemainingStatements pt) (m_block (getOperands pt) s return cont_c cont_b cont_t) return cont_c cont_b cont_t)) ; if "begin"
       ((eqv? (getFirstOperation pt) 'continue) (cont_c s))
       ((eqv? (getFirstOperation pt) 'break) (cont_b s))
-      (else (cont_t (buildError "interpreter ERROR: Invalid statement:" (getFirstOperation pt)))))))
+      (else (cont_t (buildError "INTERPRETER ERROR: Invalid statement:" (getFirstOperation pt)))))))
 
 ; ------------------------------------------------------------------------------
 ; m_eval - evaluates an expression
@@ -113,22 +122,22 @@
       ((eqv? st 'true) (cons #t s))
       ((eqv? st 'false) (cons #f s))
       ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (cont_t (buildError "VAR ERROR: Variable used before declaration or assignment:" st)) (cons (getVal st s) s)))
-      ((eqv? (getStOperator st) '+) (cons (+ (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
+      ((eqv? (getStOperator st) '+) (cons (+ (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '-)
-       (if (null? (getStRemainingOperands st)) (cons (- (car (m_eval (getStFirstOperand st) s))) (cdr (m_eval (getStFirstOperand st) s))) (cons (- (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))))
-      ((eqv? (getStOperator st) '*) (cons (* (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '/) (cons (floor (/ (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '%) (cons (modulo (car (m_eval (getStFirstOperand st) s)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '==) (cons (eqv? (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '!=) (cons (not (eqv? (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s)))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '>) (cons (> (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '>=) (cons (>= (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '<) (cons (< (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '<=) (cons (<= (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '!) (cons (not (car (m_eval (getStFirstOperand st) s))) (cdr (m_eval (getStFirstOperand st) s))))
-      ((eqv? (getStOperator st) '&&) (cons (and (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      ((eqv? (getStOperator st) '||) (cons (or (car (m_eval (getStFirstOperand st) s))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s))))))
-      (else (error "ERROR: Unknown operator/statement.")) )))
+       (if (null? (getStRemainingOperands st)) (cons (- (car (m_eval (getStFirstOperand st) s cont_t))) (cdr (m_eval (getStFirstOperand st) s cont_t))) (cons (- (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t)))))
+      ((eqv? (getStOperator st) '*) (cons (* (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '/) (cons (floor (/ (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t)))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '%) (cons (modulo (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '==) (cons (eqv? (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '!=) (cons (not (eqv? (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t)))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '>) (cons (> (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '>=) (cons (>= (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '<) (cons (< (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '<=) (cons (<= (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '!) (cons (not (car (m_eval (getStFirstOperand st) s cont_t))) (cdr (m_eval (getStFirstOperand st) s cont_t))))
+      ((eqv? (getStOperator st) '&&) (cons (and (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      ((eqv? (getStOperator st) '||) (cons (or (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
+      (else (cont_t (buildError "ERROR: Unknown operator/statement." st))) )))
 
 ; ------------------------------------------------------------------------------
 ; m_assign - handles an assigment statement
@@ -144,8 +153,8 @@
 (define getVar (lambda (st) (car st)))
 
 (define m_assign
-  (lambda (st s)
-    (setVal (getVar st) (car (m_eval (getStFirstOperand st) s)) (cdr (m_eval (getStFirstOperand st) s))) ))
+  (lambda (st s cont_t)
+    (setVal (getVar st) (car (m_eval (getStFirstOperand st) s cont_t)) (cdr (m_eval (getStFirstOperand st) s cont_t))) ))
 
 ; ------------------------------------------------------------------------------
 ; m_if - handles a conditional block
@@ -160,11 +169,11 @@
 (define m_if
   (lambda (condition ifblock elseblock state return cont_c cont_b cont_t)
     (cond
-      ((null? condition) (error "CONDITION ERROR: Condition cannot be null."))
-      ((null? ifblock) (error "CONDITION ERROR: Block cannot be null."))
-      ((null? state) (error "CONDITION ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (interpreter (cons ifblock '()) (cdr (m_eval condition state)) return cont_c cont_b cont_t))
-      (else (if (null? elseblock) (cdr (m_eval condition state)) (interpreter (cons elseblock '()) (cdr (m_eval condition state)) return cont_c cont_b cont_t))))))
+      ((null? condition) (cont_t (buildError "CONDITION ERROR: Condition cannot be null.")))
+      ((null? ifblock) (cont_t (buildError "CONDITION ERROR: Block cannot be null.")))
+      ((null? state) (cont_t (buildError "CONDITION ERROR: State cannot be null.")))
+      ((car (m_eval condition state cont_t)) (interpreter (cons ifblock '()) (cdr (m_eval condition state cont_t)) return cont_c cont_b cont_t))
+      (else (if (null? elseblock) (cdr (m_eval condition state cont_t)) (interpreter (cons elseblock '()) (cdr (m_eval condition state cont_t)) return cont_c cont_b cont_t))))))
       
 ; ------------------------------------------------------------------------------
 ; decVal - declares and initializes a variable
@@ -184,9 +193,9 @@
   (lambda (name value state)
     (cond
       ; if name is null, error
-      ((null? name) (error "DECVAL ERROR: Failed adding variable to state."))
+      ((null? name) (cont_t (buildError "DECVAL ERROR: Failed adding variable to state.")))
       ; if the var name already exists, error
-      ((not (nameAvailable name (caar state))) (error "DECVAL NAMESPACE ERROR: Namespace for var already occupied."))
+      ((not (nameAvailable name (caar state))) (cont_t (buildError "DECVAL NAMESPACE ERROR: Namespace for var already occupied.")))
       (else
        ; add name and value to state
        (cons (cons (cons name (caar state)) (cons (cons value (cadar state)) '())) (cdr state))))))
@@ -213,7 +222,7 @@
 (define setVal
   (lambda (name value state)
     (cond
-      ((null? state) (error "SETVAL ERROR: Variable not found!"))
+      ((null? state) (cont_t (buildError "SETVAL ERROR: Variable not found!")))
       ((eqv? #f (call/cc (lambda (cont) (cont (setVal* name value (car state) cont))))) (cons (car state) (setVal name value (cdr state))))
       (else (cons (setVal* name value (car state) (lambda (v) (error v))) (cdr state))))))
 
@@ -243,7 +252,7 @@
 (define getVal
   (lambda (name state)
     (cond
-      ((null? name) (error "GETVAL ERROR: Name cannot be null."))
+      ((null? name) (cont_t (buildError "GETVAL ERROR: Name cannot be null.")))
       ((null? state) 'NULL)
       ((or (integer? name) (boolean? name)) name)
       (else
@@ -266,7 +275,7 @@
       ((and (null? vars) (null? vals)) 'NULL)
       ((and (not (null? vars)) (not (null? vals)))
        (if (eqv? name (car vars)) (car vals) (getVal* name (cdr vars) (cdr vals))))
-      (else (error "STATE MISMATCH ERROR: Different number of Variables and Values.")))))
+      (else (cont_t (buildError "STATE MISMATCH ERROR: Different number of Variables and Values."))))))
 
 ; ------------------------------------------------------------------------------
 ; m_while - handles a WHILE loop
@@ -280,11 +289,11 @@
 (define m_while
   (lambda (condition block state return cont_b cont_t)
     (cond
-      ((null? condition) (error "LOOP ERROR: Condition cannot be null."))
-      ((null? block) (error "LOOP ERROR: Block cannot be null."))
-      ((null? state) (error "LOOP ERROR: State cannot be null."))
-      ((car (m_eval condition state)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state)) return (lambda (s) (cont_c (popLayer s))) (lambda (s) (cont_b (popLayer s)))))) return cont_b cont_t) )
-      (else (cont_b (cdr (m_eval condition state)))))))
+      ((null? condition) (cont_t (buildError "LOOP ERROR: Condition cannot be null.")))
+      ((null? block) (cont_t (buildError "LOOP ERROR: Block cannot be null.")))
+      ((null? state) (cont_t (buildError "LOOP ERROR: State cannot be null.")))
+      ((car (m_eval condition state cont_t)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state cont_t)) return (lambda (s) (cont_c (popLayer s))) (lambda (s) (cont_b (popLayer s))) cont_t))) return cont_b cont_t) )
+      (else (cont_b (cdr (m_eval condition state cont_t)))))))
 
 ; ------------------------------------------------------------------------------
 ; m_block - handles a block
