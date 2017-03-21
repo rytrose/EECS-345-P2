@@ -38,7 +38,7 @@
 ; ------------------------------------------------------------------------------
 (define interpret
   (lambda (fd)
-    (interpreter (parser fd) '(() ()))))
+    (interpreter (parser fd) '((() ())))))
 
 ; ------------------------------------------------------------------------------
 ; interpreter
@@ -165,11 +165,19 @@
       ; if name is null, error
       ((null? name) (error "DECVAL ERROR: Failed adding variable to state."))
       ; if the var name already exists, error
-      ((not (eqv? (getVal name state) 'NULL)) (error "DECVAL NAMESPACE ERROR: Namespace for var already occupied."))
+      ((not (nameAvailable name (caar state))) (error "DECVAL NAMESPACE ERROR: Namespace for var already occupied."))
       (else
        ; add name and value to state
-       (cons (cons name (car state)) (cons (cons value (cadr state)) '()) )))))
+       (cons (cons (cons name (caar state)) (cons (cons value (cadar state)) '())) (cdr state))))))
 
+; Check to see if this variable is already defined on this layer of the state. That would be illegal. However, if the variable is declared on a previous layer,
+; it can legally be redeclared on this layer.
+(define nameAvailable
+  (lambda (name varsLayer)
+    (cond
+      ((null? varsLayer) #t)
+      ((eqv? (car varsLayer) name) #f)
+      (else (nameAvailable name (cdr varsLayer))))))
 ; ------------------------------------------------------------------------------
 ; setVal - sets the value of an initialized variable
 ; inputs:
