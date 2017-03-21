@@ -10,7 +10,7 @@
 ; ------------------------------------------------------------------------------
 ; test
 ; ------------------------------------------------------------------------------
-(define testPrograms '(("Test1.txt" 20)("Test2.txt" 164)("Test3.txt" 32)("Test4.txt" 2)("Test6.txt" 25)("Test7.txt" 21)("Test8.txt" 6)("Test9.txt" -1)("Test10.txt" 789)("Test14.txt" 12)("Test15.txt" 125)("Test16.txt" 110)("Test17.txt" 2000400)("Test18.txt" 101)("Test20.txt" 21)))
+(define testPrograms '(("Test1.txt" 20)("Test2.txt" 164)("Test3.txt" 32)("Test4.txt" 2)("Test6.txt" 25)("Test7.txt" 21)("Test8.txt" 6)("Test9.txt" -1)("Test10.txt" 789)("Test14.txt" 12)("Test15.txt" 125)("Test16.txt" 110)("Test17.txt" 2000400)("Test18.txt" 101)))
 
 (define testInterpreter
   (lambda (testPrograms passed failed)
@@ -53,8 +53,8 @@
     (error "BREAK ERROR: Break outside of loop!")))
 
 (define throwError
-  (lambda (s)
-    (display s) ))
+  (lambda (s e)
+    (error (buildError "UNCAUGHT EXCEPTION: " e)) ))
 
 (define buildError
   (lambda (s e)
@@ -96,7 +96,8 @@
       ((eqv? (getFirstOperation pt) 'continue) (cont_c s))
       ((eqv? (getFirstOperation pt) 'break) (cont_b s))
       ((eqv? (getFirstOperation pt) 'try) (interpreter (getRemainingStatements pt) (m_try (getFirstOperand pt) (getSecondOperand pt) (getThirdOperand pt) s return cont_c cont_b cont_t) return cont_c cont_b cont_t))
-      (else (cont_t s (buildError "INTERPRETER ERROR: Invalid statement:" (getFirstOperation pt)))))))
+      ((eqv? (getFirstOperation pt) 'throw) (cont_t s (getFirstOperand pt)))
+      (else (cont_t s (buildError "INTERPRETER ERROR: Invalid statement: " (getFirstOperation pt)))))))
 
 ; ------------------------------------------------------------------------------
 ; m_eval - evaluates an expression
@@ -120,7 +121,7 @@
       ((null? st) (cons '() s))
       ((eqv? st 'true) (cons #t s))
       ((eqv? st 'false) (cons #f s))
-      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (cont_t s (buildError s "VAR ERROR: Variable used before declaration or assignment:" st)) (cons (getVal st s) s)))
+      ((atom? st) (if (or (eqv? (getVal st s) 'NULL) (null? (getVal st s))) (cont_t s (buildError "VAR ERROR: Variable used before declaration or assignment: " st)) (cons (getVal st s) s)))
       ((eqv? (getStOperator st) '+) (cons (+ (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '-)
        (if (null? (getStRemainingOperands st)) (cons (- (car (m_eval (getStFirstOperand st) s cont_t))) (cdr (m_eval (getStFirstOperand st) s cont_t))) (cons (- (car (m_eval (getStFirstOperand st) s cont_t)) (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t)))))
@@ -137,7 +138,7 @@
       ((eqv? (getStOperator st) '!) (cons (not (car (m_eval (getStFirstOperand st) s cont_t))) (cdr (m_eval (getStFirstOperand st) s cont_t))))
       ((eqv? (getStOperator st) '&&) (cons (and (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
       ((eqv? (getStOperator st) '||) (cons (or (car (m_eval (getStFirstOperand st) s cont_t))  (car (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))) (cdr (m_eval (getStSecondOperand st) (cdr (m_eval (getStFirstOperand st) s cont_t)) cont_t))))
-      (else (cont_t (buildError "ERROR: Unknown operator/statement." st))) )))
+      (else (cont_t (buildError "ERROR: Unknown operator/statement: " st))) )))
 
 ; ------------------------------------------------------------------------------
 ; m_assign - handles an assigment statement
@@ -169,9 +170,9 @@
 (define m_if
   (lambda (condition ifblock elseblock state return cont_c cont_b cont_t)
     (cond
-      ((null? condition) (cont_t (buildError "CONDITION ERROR: Condition cannot be null.")))
-      ((null? ifblock) (cont_t (buildError "CONDITION ERROR: Block cannot be null.")))
-      ((null? state) (cont_t (buildError "CONDITION ERROR: State cannot be null.")))
+      ((null? condition) (cont_t (buildError "CONDITION ERROR: Condition cannot be null." "")))
+      ((null? ifblock) (cont_t (buildError "CONDITION ERROR: Block cannot be null." "")))
+      ((null? state) (cont_t (buildError "CONDITION ERROR: State cannot be null." "")))
       ((car (m_eval condition state cont_t)) (interpreter (cons ifblock '()) (cdr (m_eval condition state cont_t)) return cont_c cont_b cont_t))
       (else (if (null? elseblock) (cdr (m_eval condition state cont_t)) (interpreter (cons elseblock '()) (cdr (m_eval condition state cont_t)) return cont_c cont_b cont_t))))))
       
@@ -193,9 +194,9 @@
   (lambda (name value state)
     (cond
       ; if name is null, error
-      ((null? name) (cont_t (buildError "DECVAL ERROR: Failed adding variable to state.")))
+      ((null? name) (cont_t (buildError "DECVAL ERROR: Failed adding variable to state." "")))
       ; if the var name already exists, error
-      ((not (nameAvailable name (caar state))) (cont_t (buildError "DECVAL NAMESPACE ERROR: Namespace for var already occupied.")))
+      ((not (nameAvailable name (caar state))) (cont_t (buildError "DECVAL NAMESPACE ERROR: Namespace for var already occupied: " name)))
       (else
        ; add name and value to state
        (cons (cons (cons name (caar state)) (cons (cons value (cadar state)) '())) (cdr state))))))
@@ -222,7 +223,7 @@
 (define setVal
   (lambda (name value state)
     (cond
-      ((null? state) (cont_t state (buildError state "SETVAL ERROR: Variable not found!")))
+      ((null? state) (cont_t state (buildError "SETVAL ERROR: Variable not found: " name)))
       ((eqv? #f (call/cc (lambda (cont) (cont (setVal* name value (car state) cont))))) (cons (car state) (setVal name value (cdr state))))
       (else (cons (setVal* name value (car state) (lambda (v) (error v))) (cdr state))))))
 
@@ -252,7 +253,7 @@
 (define getVal
   (lambda (name state)
     (cond
-      ((null? name) (cont_t state (buildError state "GETVAL ERROR: Name cannot be null.")))
+      ((null? name) (cont_t state (buildError "GETVAL ERROR: Name cannot be null." "")))
       ((null? state) 'NULL)
       ((or (integer? name) (boolean? name)) name)
       (else
@@ -275,7 +276,7 @@
       ((and (null? vars) (null? vals)) 'NULL)
       ((and (not (null? vars)) (not (null? vals)))
        (if (eqv? name (car vars)) (car vals) (getVal* name (cdr vars) (cdr vals))))
-      (else (cont_t (buildError "STATE MISMATCH ERROR: Different number of Variables and Values."))))))
+      (else (cont_t (buildError "STATE MISMATCH ERROR: Different number of Variables and Values." ""))))))
 
 ; ------------------------------------------------------------------------------
 ; m_while - handles a WHILE loop
@@ -289,9 +290,9 @@
 (define m_while
   (lambda (condition block state return cont_b cont_t)
     (cond
-      ((null? condition) (cont_t (buildError "LOOP ERROR: Condition cannot be null.")))
-      ((null? block) (cont_t (buildError "LOOP ERROR: Block cannot be null.")))
-      ((null? state) (cont_t (buildError "LOOP ERROR: State cannot be null.")))
+      ((null? condition) (cont_t (buildError "LOOP ERROR: Condition cannot be null." "")))
+      ((null? block) (cont_t (buildError "LOOP ERROR: Block cannot be null." "")))
+      ((null? state) (cont_t (buildError "LOOP ERROR: State cannot be null." "")))
       ((car (m_eval condition state cont_t)) (m_while condition block (call/cc (lambda (cont_c) (interpreter (cons block '()) (cdr (m_eval condition state cont_t)) return (lambda (s) (cont_c (popLayer s))) (lambda (s) (cont_b (popLayer s))) cont_t))) return cont_b cont_t) )
       (else (cont_b (cdr (m_eval condition state cont_t)))))))
 
